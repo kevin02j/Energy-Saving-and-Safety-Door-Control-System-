@@ -5,28 +5,28 @@
 #include <LiquidCrystal_I2C.h>
 #include <EEPROM.h>
 
-/* Definicion de los estados del proceso */ 
+/* Definition of process states */
 #define S_HOME 0
 #define S_LOGIN 1
 #define S_ACTION 2
 #define S_NEW_PASSWORD 3
 uint8_t state = S_HOME;  
 
-/* Variables para llevar control del tiempo */
-unsigned long lastKeyPressed = 0;      /* Ultima vez en que se presionó una tecla */
-unsigned long lateSleep = 30000;       /* Tiempo (ms) de espera para entrar al modo Deep Sleep */
-unsigned long lastActionExecuted = 0;  /* Ultima ves que se ejecuto una accion */
-unsigned long lateAction = 10000;      /* Tiempo (ms) de espera si no se ejecuta ninguna accion */
+/* Variables to track time */
+unsigned long lastKeyPressed = 0;      /* Last time a key was pressed */
+unsigned long lateSleep = 30000;       /* Time (ms) to wait before entering Deep Sleep mode */
+unsigned long lastActionExecuted = 0;  /* Last time an action was executed */
+unsigned long lateAction = 10000;      /* Time (ms) to wait if no action is executed */
 
-/* Varaibles para manejo de la contraseña */
-int indice = 0;               /* Lleva el control de los digitos ingresados */
-int password;                 /* Pin que ingresa el usuario */
-int currentPassword = 1234;   /* Pin guardado en la memoria, si no hay informacion guardada asigna un PIN por defecto */
-int passwordAdress = 0;       /* Direccion en la memoria EEPROM donde se encuentra el pin */
-char key;                     /* Guarda el valor de la tecla del keypad que se presiona */
+/* Variables for password management */
+int indice = 0;               /* Tracks the entered digits */
+int password;                 /* User-entered PIN */
+int currentPassword = 1234;   /* PIN stored in memory, assigns a default PIN if no saved information */
+int passwordAdress = 0;       /* Address in EEPROM memory where the PIN is stored */
+char key;                     /* Stores the value of the keypad key pressed */
 String keyWord;               
 
-/* Configuracion del teclado matricial */
+/* Matrix keypad configuration */
 const byte ROWS = 4;          
 const byte COLS = 4;
 char keys[ROWS][COLS] = {
@@ -39,18 +39,18 @@ uint8_t colPins[COLS] = { 26, 25, 33, 32 };
 uint8_t rowPins[ROWS] = { 13, 12, 14, 27 };
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-/* Crear objeto lcd */
+/* Create LCD object */
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-/* Definicion de pines */
-const int LED_PIN = 2;   /* GPIO del LED integrado */
-const int BUTTON = 15;   /* GPIO del boton para despertar al MCU */
-const int GATE_1 = 34;   /* GPIO del sensor de final de carrera 1 */
-const int GATE_2 = 35;   /* GPIO del sensor de final de carrera 2 */
-const int DC_MOTOR = 4;  /* GPIO para activar el motor DC */
+/* Pin definitions */
+const int LED_PIN = 2;   /* Integrated LED GPIO */
+const int BUTTON = 15;   /* Button GPIO to wake up the MCU */
+const int GATE_1 = 34;   /* GPIO for gate sensor 1 */
+const int GATE_2 = 35;   /* GPIO for gate sensor 2 */
+const int DC_MOTOR = 23; /* GPIO to activate the DC motor */
 bool stateMotor = false;
 
-/* Mostrar interfaz de inicio */
+/* Display home interface */
 void home() {
   digitalWrite(LED_PIN, LOW);
   lcd.clear();
@@ -60,7 +60,7 @@ void home() {
   lcd.print("Press the A key");
 }
 
-/* Interfaz de inicio de sesion */
+/* Login interface */
 void login() {
   digitalWrite(LED_PIN, LOW);
   lcd.clear();
@@ -70,7 +70,7 @@ void login() {
   lcd.print("PIN: ");
 }
 
-/* Interfaz para monitorear las acciones ejecutadas */
+/* Interface to monitor executed actions */
 void executeActions() {
   digitalWrite(LED_PIN, LOW);
   lcd.clear();
@@ -88,7 +88,7 @@ void executeActions() {
   lcd.print("OFF");
 }
 
-/* Interfaz para el cambio de contraseña */
+/* Interface for changing password */
 void newPassword() {
   digitalWrite(LED_PIN, LOW);
   lcd.clear();
@@ -98,42 +98,43 @@ void newPassword() {
   lcd.print("PIN: ");
 }
 
-/* Función que el ESP32 entre en modo de Deep Sleep */ 
+/* Function for ESP32 to enter Deep Sleep mode */ 
 void deepSleep() {
   digitalWrite(LED_PIN, LOW);
   lcd.clear();
   lcd.print("Deep Sleep...zzz");
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_15, 1); 
-  esp_deep_sleep_start();
   btStop();
   WiFi.mode(WIFI_OFF);
+  esp_deep_sleep_start();
 }
 
-/* Funcion para reemplazar el delay */
+/* Delay function replacement */
 void delayReplacement(unsigned long timeDelay) {
   unsigned long timeInit = millis();
   while (millis() - timeInit < timeDelay);
 }
 
-/*Bucle de configuracion */
+/*Setup loop */
 void setup() {
-  /* Config Serial Port */
+  /* Serial Port Config */
   Serial.begin(115200);
   while (!Serial) {}
 
-  /* Cofig Pin In/Out */
+  /* Pin configuration */
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUTTON, INPUT_PULLDOWN);
   pinMode(GATE_1, INPUT);
   pinMode(GATE_2, INPUT);
   pinMode(DC_MOTOR, OUTPUT);
+  digitalWrite(DC_MOTOR, HIGH);
 
-  /* Config LCD I2C */
+  /* LCD I2C Config */
   lcd.init();
   lcd.backlight();
   home();
 
-  /* Config EEPROM memory */
+  /* EEPROM memory config */
   EEPROM.begin(512);
   EEPROM.get(passwordAdress, password);
 
@@ -144,12 +145,12 @@ void setup() {
   Serial.println(currentPassword);
 }
 
-/* Bucle principal */
+/* Main loop */
 void loop() {
-  key = keypad.getKey();  /* Obtener la tecla presionada */
+  key = keypad.getKey();  /* Get the pressed key */
   bool gateFlag = true;
 
-  /* Si no se presiona una tecla en 30s la ESP entra en modo Deep sleep */
+  /* If no key is pressed within 30s, ESP enters Deep Sleep mode */
   if (key != NO_KEY) 
   {
     lastKeyPressed = millis();
@@ -161,11 +162,11 @@ void loop() {
     deepSleep();
   }
 
-  /* Funcionamiento de los estados del proceso */ 
+  /* Process state operation */ 
   switch (state) {
     case S_HOME:
       {
-        /* Ir al siguiente estado */
+        /* Go to the next state */
         if (key == 'A') 
         {
           digitalWrite(LED_PIN, HIGH);
@@ -174,7 +175,7 @@ void loop() {
           login();
         }
 
-        /* Enviar el MCU al modo Deep Sleep */
+        /* Send MCU to Deep Sleep mode */
         else if (key == 'D') 
         {
           digitalWrite(LED_PIN, HIGH);
@@ -185,7 +186,7 @@ void loop() {
       break;
     case S_LOGIN:
       {
-        /* Volver al estado anterior */
+        /* Return to previous state */
         if (key == 'B') 
         {
           digitalWrite(LED_PIN, HIGH);
@@ -194,7 +195,7 @@ void loop() {
           home();
         }
 
-        /* Enviar el MCU al modo Deep Sleep */
+        /* Send MCU to Deep Sleep mode */
         if (key == 'D') 
         {
           digitalWrite(LED_PIN, HIGH);
@@ -202,10 +203,10 @@ void loop() {
           deepSleep();
         }
 
-        /* Comprobar si se presiona una tecla valida para el ingreso del PIN */
+        /* Check if a valid key is pressed to enter the PIN */
         if ((key != NO_KEY) && (isDigit(key) || (key == '*'))) 
         {
-          /* Borrar el ultimo digito ingresado */
+          /* Delete the last entered digit */
           if (key == '*') 
           {
             if (indice > 0) 
@@ -228,12 +229,12 @@ void loop() {
           }
         } 
 
-        /* El pin tiene 4 digitos */
+        /* PIN has 4 digits */
         if (indice == 4) 
         {
           password = keyWord.toInt();  
 
-          /* Comprobar si la contraseña es correcta */   
+          /* Check if the password is correct */   
           if (password == currentPassword) 
           {
             digitalWrite(LED_PIN, HIGH);
@@ -252,15 +253,15 @@ void loop() {
             login();
           }
 
-          //Limpiar para ingresar un nuevo PIN
+          //Clear for entering a new PIN
           indice = 0;
           keyWord = "";
         }
-      }  // FIN state LOGIN
+      }  // END state LOGIN
       break;
     case S_ACTION:
       {
-        /* Sino se ejecuta una accion en < lateAction se bloquea */
+        /* If no action is executed in < lateAction, it locks */
         lastActionExecuted = lastKeyPressed;
         if ((millis() - lastActionExecuted) > lateAction) 
         {
@@ -269,10 +270,11 @@ void loop() {
           login();
         }
 
-        /* Ir al siguiente estado */
+        /* Go to the next state */
         if (key == 'A') 
         {
           digitalWrite(LED_PIN, HIGH);
+          digitalWrite(DC_MOTOR, HIGH);
           delayReplacement(100);
           state = S_NEW_PASSWORD;
           newPassword();
@@ -280,10 +282,11 @@ void loop() {
           lastActionExecuted = millis();
         }
 
-        /* Volver al estado anterior */
+        /* Return to previous state */
         if (key == 'B') 
         {
           digitalWrite(LED_PIN, HIGH);
+          digitalWrite(DC_MOTOR, HIGH);
           delayReplacement(100);
           state = S_LOGIN;
           login();
@@ -291,26 +294,26 @@ void loop() {
           lastActionExecuted = millis();
         }
         
-        /* Control on/off del motor DC */
+        /* DC motor on/off control */
         if (key == 'C') 
         {
           stateMotor = !stateMotor;
           if (!stateMotor) 
           {
-            digitalWrite(DC_MOTOR, LOW);
+            digitalWrite(DC_MOTOR, HIGH);
             lcd.setCursor(6, 1);
             lcd.print("OFF");
           } 
           else 
           {
-            digitalWrite(DC_MOTOR, HIGH);
+            digitalWrite(DC_MOTOR, LOW);
             lcd.setCursor(6, 1);
             lcd.print("ON ");
           }
           lastActionExecuted = millis();
         }
 
-        /* Enviar el MCU al modo Deep Sleep */
+        /* Send MCU to Deep Sleep mode */
         if (key == 'D') 
         {
           digitalWrite(LED_PIN, HIGH);
@@ -318,10 +321,10 @@ void loop() {
           deepSleep();
         }
 
-        /* Comprobar si se cambio de estado en los bloques anteriores */
+        /* Check if the state changed in the previous blocks */
         if (gateFlag) 
         {
-          /* Verifica el estado del primer sensor de final de carrera */
+          /* Check the state of the first gate sensor */
           if (digitalRead(GATE_1) == 0) 
           {
             lcd.setCursor(1, 1);
@@ -335,7 +338,7 @@ void loop() {
             lcd.print("OFF");
           }
 
-          /* Verifica el estado del segundo sensor de final de carrera */
+          /* Check the state of the second gate sensor */
           if (digitalRead(GATE_2) == 0) 
           {
             lcd.setCursor(12, 1);
@@ -353,7 +356,7 @@ void loop() {
       break;
     case S_NEW_PASSWORD:
       {
-        /* Enviar el MCU al modo Deep Sleep */
+        /* Send MCU to Deep Sleep mode */
         if (key == 'D') 
         {
           digitalWrite(LED_PIN, HIGH);
@@ -361,7 +364,7 @@ void loop() {
           deepSleep();
         }
 
-        /* No guardar la contraseña */
+        /* Don't save the password */
         if (key == 'B') 
         {
           digitalWrite(LED_PIN, HIGH);
@@ -372,10 +375,10 @@ void loop() {
           login();
         }
 
-        /* Leer y guardar el nuevo PIN */
+        /* Read and save the new PIN */
         if ((key != NO_KEY) && (isDigit(key) || (key == '*'))) 
         {
-          /* Borrar el ultimo caracter ingresado */
+          /* Delete the last entered character */
           if (key == '*') 
           {
             if (indice > 0) 
@@ -398,12 +401,12 @@ void loop() {
           }
         } 
         
-        /* Tamño del pin es correcto */
+        /* Password size is correct */
         if (indice == 4) 
         {
           password = keyWord.toInt();
 
-          /* Guardar el nuevo pin */
+          /* Save the new password */
           if (key == 'A') 
           {
             digitalWrite(LED_PIN, HIGH);
@@ -422,12 +425,12 @@ void loop() {
             login();
           }
         }
-      }  //FIN state new password
+      }  //END state new password
       break;
     default:
     {
       Serial.println("State not defined");
     }
     break;
-  }  //Switch key FIN
+  }  //Switch key END
 }
